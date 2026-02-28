@@ -86,7 +86,8 @@ const AddressParse = (address, options) => {
     log('获取邮编的结果 --->', address)
 
     // 地址分割，排序
-    let splitAddress = address.split(' ').filter(item => item && !/^\d+$/.test(item)).map(item => item.trim());
+    // Keep short numeric fragments (e.g. room number "501"), but still drop likely order IDs.
+    let splitAddress = address.split(' ').filter(item => item && !/^\d{6,}$/.test(item)).map(item => item.trim());
     // 这里先不排序了，排序可能出现问题，比如：北京 北京市
     splitAddress = sortAddress(splitAddress)
     log('分割地址 --->', splitAddress)
@@ -495,7 +496,25 @@ const filterPhone = (address) => {
         phone = mobile[0]
         address = address.replace(mobile[0], ' ')
     }
-    return {address, phone: phone.replace(/^\+?86-?/g, '')}
+
+    // 固话：支持 0xx/0xxx 区号，7-8 位号码，支持分隔符和分机
+    // 例如：010-88886666、0571 88886666、(021)66668888-123
+    if (!phone) {
+        const landlineReg = /(?:\+?86[- ]?)?(?:\(?0\d{2,3}\)?[- ]?)\d{7,8}(?:-\d{1,6})?/g
+        const landline = landlineReg.exec(address)
+        if (landline) {
+            phone = landline[0]
+            address = address.replace(landline[0], ' ')
+        }
+    }
+
+    return {
+        address,
+        phone: phone
+            .replace(/^\+?86[- ]?/g, '')
+            .replace(/[（）]/g, '')
+            .trim()
+    }
 }
 
 /**
@@ -551,7 +570,8 @@ const cleanAddress = (address, textFilter = []) => {
         address = address.replace(new RegExp(str, 'g'), ' ')
     })
 
-    const pattern = new RegExp("[`~!@#$^&*()=|{}':;',\\[\\]\.<>/?~！@#￥……&*（）——|{}【】‘；：”“’。，、？]", 'g')
+    // Keep "#" because it is frequently used in building/room identifiers like "A3#501".
+    const pattern = new RegExp("[`~!@$^&*()=|{}':;',\\[\\]\.<>/?~！@￥……&*（）——|{}【】‘；：”“’。，、？]", 'g')
     address = address.replace(pattern, ' ')
 
     // 多个空格replace为一个
